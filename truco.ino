@@ -10,39 +10,55 @@
  servo2       8
  servo3       9
  servo4       10
+ --- pinout dos pushbuttons (ñ implementado)---
+ pedir truco    0 
+ fugir truco    1 
+ aumentar truco 2
+ aceitar truco  3
  */
 
 #include <SPI.h>
+#include <Vector.h>
 #include <Servo.h>
 #include <MFRC522.h>
 
 #define RST_PIN 3         // configuravel, pwm
 #define SS_PIN 5         // configuravel, pwm
 
+//const int PinTruco = 0, PinFugir = 1, PinAumentar = 2, PinAceitar = 3; <- pins para pushbuttons p truco, ñ implementado
+
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // instancia para leitor NFC
-Servo servo1, servo2, servo3, servo4;// instancias para os 4 servos
+Servo servo1, servo2, servo3, servo4; // instancias para os 4 servos
 
 void setup() {
 	Serial.begin(9600);		// Initialize serial communications with the PC
 	SPI.begin();			// Init SPI bus
+  //pinMode(PinTruco, INPUT);
+  //pinMode(PinFugir, INPUT);
+  //pinMode(PinAumentar, INPUT);
+  //pinMode(PinAceitar, INPUT);
 	mfrc522.PCD_Init();		// Init MFRC522
 	delay(50);				// delay p inicializaçao do leitor
   servo1.attach(7,500,2500);  // conectar e inicializar todos os servos na posiçao 0 (pins 7,8,9,10)
   servo2.attach(8,500,2500);
   servo3.attach(9,500,2500);
   servo4.attach(10,500,2500);
-  servo1.write(0);
-  servo2.write(0);
-  servo3.write(0);
+  servo1.write(15);
+  servo2.write(15);
+  servo3.write(15);
   servo4.write(0);
   Serial.println("");
-	mfrc522.PCD_DumpVersionToSerial();	// mostrar versao do leitor (se vir algo estranho, provavelmente inicializou errado; reiniciar arduino)
-	Serial.println(F("Esperando ler carta..."));
+	mfrc522.PCD_DumpVersionToSerial();	//mostrar versao do leitor
+	Serial.println(F("Se a versão do leitor não é 0xB2, resetar o arduino! (Provável mal contato!)"));
 }
 
+//declaraçoes de variaveis globais (rudinei chora)
 byte Card[16][4]; //matriz para armazenar os dados do ultimo NFC lido
-int carta1, carta2, carta3; //variaveis para armazenar as cartas
+int carta1, carta2, carta3, cartajogador; //variaveis para armazenar as cartas
 int pjogador, probo, pontosemjogo; //variaveis para armazenar os pontos
+int rodadaatual, vez = 2;
+
+//int EstadoTruco = 0, EstadoFugir = 0, EstadoAumentar = 0, EstadoAceitar = 0; <- coisas relacionadas a truco, ñ implementado
 
 // inicializa a matriz com zeros
 void ResetInfo(){
@@ -111,25 +127,41 @@ void ShowInfo(){
   Serial.println("--------------------------");
 }
 
-//mexe servo1
-void jogar1(){
-  servo1.write(150);
-  delay(100);
-  servo1.write(0);
-}
-
-//mexe servo2
-void jogar2(){
-  servo2.write(150);
-  delay(100);
-  servo2.write(0);
-}
-
-//mexe servo3
-void jogar3(){
-  servo3.write(150);
-  delay(100);
-  servo3.write(0);
+//mexe servo n e tira cartan da mao do robo. retorna o id da carta jogada
+int jogar(int n){
+  int idjogada = -1;
+  if(n == 1){
+  Serial.print("Jogando carta 1: ");
+  Serial.println(nomear(carta1));
+  servo1.write(130);
+  delay(400);
+  servo1.write(15);
+  idjogada = carta1;
+  carta1 = -1;
+  }
+  if(n == 2){
+  Serial.print("Jogando carta 2: ");
+  Serial.println(nomear(carta2));
+  servo2.write(130);
+  delay(400);
+  servo2.write(15);
+  idjogada = carta2;
+  carta2 = -1;
+  }
+  if(n == 3){
+  Serial.print("Jogando carta 3: ");
+  Serial.println(nomear(carta3));
+  servo3.write(130);
+  delay(400);
+  servo3.write(15);
+  idjogada = carta3;
+  carta3 = -1;
+  }
+  if(n < 1 || n > 3){
+    Serial.print("Tentando jogar carta inválida! n = ");
+    Serial.println(n, DEC);
+  }
+  return idjogada;
 }
 
 //funcao hardcoded que recebe o numero de uma carta e retorna uma string com seu nome
@@ -146,7 +178,7 @@ String nomear(int numcarta){
   if(numcarta == 10) return("Seis de paus");
   if(numcarta == 11) return("Seis de espadas");
   if(numcarta == 12) return("Sete de espadas");
-  if(numcarta == 13) return("Sete de copas");
+  if(numcarta == 13) return("Sete de paus");
   if(numcarta == 14) return("Rainha de paus");
   if(numcarta == 15) return("Rainha de ouros");
   if(numcarta == 16) return("Rainha de espadas");
@@ -172,12 +204,12 @@ String nomear(int numcarta){
   if(numcarta == 36) return("Tres de paus");
   if(numcarta == 37) return("Pica fumo");
   if(numcarta == 38) return("Espadilha");
-  if(numcarta == 39) return("Copas");
+  if(numcarta == 39) return("Copeta");
   if(numcarta == 40) return("Zap");
   return("erro ao obter nome da carta");
 }
 
-//funcao hardcoded que recebe o hex de uma carta e retorna o valor de sua força no truco mineiro. volta -1 em caso de erro
+//funcao hardcoded que recebe o numero de uma carta e retorna o valor de sua força no truco mineiro. volta -1 em caso de erro
 int forca(int numcarta){
   if(numcarta == 1) return(1); // quatro de ouros
   if(numcarta == 2) return(1); // quatro de espadas
@@ -240,7 +272,7 @@ int lercarta(){
 //funcao que recebe uma carta e printa seu numero, forca e nome
 void printarcarta(int carta){
   int f = forca(carta);
-  Serial.print("A carta eh: ");
+  Serial.print("Seu ID eh: ");
   Serial.println(carta, DEC);
   Serial.print("Sua força eh: ");
   Serial.println(f, DEC);
@@ -248,128 +280,329 @@ void printarcarta(int carta){
   Serial.println(nomear(carta));
 }
 
-void novarodada() {
-    // cada rodada vale 1 ponto
-    // (estou assumindo que é isso que "pontosemjogo" significa)
-    // se for outra coisa então sinta-se livre pra criar outra variável rsrs
-    pontosemjogo = 1;
-
-    // 1 - primeiro, o robô tira 3 cartas aleatórias para si
-    carta1 = random(1, 41);
-    carta2 = random(1, 41);
-    carta3 = random(1, 41);
-
-    // aqui a gente coloca num vetor as forças das cartas na mão do robô
-    int cartas[3] = { forca(carta1), forca(carta2), forca(carta3) };
-    bool usada[3] = { false, false, false };
-
-    // 2 - oponente começa: aguardar leitura da carta do oponente
-    int cartaOponente1 = lercarta();
-    int forcaOponente1 = forca(cartaOponente1);
-
-    // 3 - checar se robô tem alguma carta mais forte
-    int MenorMaisForte = -1;     
-    int MenorForcaAcima = 1000;
-    // (setei com esses valores pra não correr riscos)
-    // (eu ia botar menorforcaacima = 100000, mas lembrei que tamo economizando memória)
-
-    // loopzinho de cria para agora sim checar se o robô tem uma carta mais forte
-    for (int i = 0; i < 3; i++) {
-        if (!usada[i] && cartas[i] > forcaOponente1 && cartas[i] < MenorForcaAcima) {
-            MenorForcaAcima = cartas[i];
-            MenorMaisForte = i;
-        }
-    }
-
-    if (MenorMaisForte >= 0) {
-        // 4 - robô joga a carta de menor força que ainda vença o oponente (se possível)
-        switch (MenorMaisForte) {
-            case 0: jogar1(); break;
-            case 1: jogar2(); break;
-            case 2: jogar3(); break;
-        }
-        usada[MenorMaisForte] = true;
-
-        // 5 - agora o robô joga a carta mais forte que sobrar
-        int MaisForte = -1;
-        int maiorForca = -1;
-        for (int i = 0; i < 3; i++) {
-            if (!usada[i] && cartas[i] > maiorForca) {
-                maiorForca = cartas[i];
-                MaisForte = i;
-            }
-        }
-        // switch pq ngm merece else if else if else if
-        switch (MaisForte) {
-            case 0: jogar1(); break;
-            case 1: jogar2(); break;
-            case 2: jogar3(); break;
-        }
-        usada[MaisForte] = true;
-
-        // 6 - agora a gente aguarda próxima jogada do oponente
-        int cartaOponente2 = lercarta();
-        int forcaOponente2 = forca(cartaOponente2);
-
-        // 7 - comparar com a segunda carta do robô
-        if (forcaOponente2 < maiorForca) {
-            // robô ganha a rodada ebaaa
-            pjogador += pontosemjogo;
-        } else {
-            // senão
-            // 8 - a gente espera a jogada do cara
-            int cartaOponente3 = lercarta();
-            int forcaOponente3 = forca(cartaOponente3);
-
-            // 9 - robô joga sua última carta
-            int Ultima = -1;
-            for (int i = 0; i < 3; i++) {
-                if (!usada[i]) {
-                    Ultima = i;
-                    break;
-                }
-            }
-            // vamo ver num switch qual carta jogar
-            switch (Ultima) {
-                case 0: jogar1(); break;
-                case 1: jogar2(); break;
-                case 2: jogar3(); break;
-            }
-            int forcaUltima = cartas[Ultima];
-
-            // se a força da última carta for maior que a força da carta do oponente
-            if (forcaUltima > forcaOponente3) {
-              // robo ganha ponto (tô supondo que é assim que o probo original era pra funfar)
-                probo += pontosemjogo;
-            } else {
-              // jogador ganha ponto (tô supondo que é assim que o pjogador original era pra funfar)
-                pjogador += pontosemjogo;
-            }
-        }
-    } else {
-        // se não houver carta mais forte na primeira jogada:
-        // dps vejo oq fazer nessa caraia, já foi tramposo escrever só um caso mano
-        // vsf como a Miya fez tudo isso T-T
-        // eu escrevi como se fosse em linguagem C, inclusive, temq ver se vai compilar
-    }
+// reseta as cartas para começar nova rodada
+void resetarcartas(){
+  carta1 = 0;
+  carta2 = 0;
+  carta3 = 0;
+  cartajogador = 0;
 }
 
+// troca a vez, reseta as cartas, incrementa a rodada, reseta pontos em jogo e le as 3 cartas do robo
+void inicializarrodada(){
+  vez = vez%2 +1;
+  resetarcartas();
+  rodadaatual++;
+  pontosemjogo = 1;
+  
+  Serial.print("Começando rodada ");
+  Serial.println(rodadaatual, DEC);
+  Serial.print("Pontuacao atual - Jogador ");
+  Serial.print(pjogador, DEC);
+  Serial.print(" X Robo ");
+  Serial.println(probo, DEC);
 
-void loop() {
-	//carta1 = lercarta();
-	//printarcarta(carta1);
-	//carta2 = lercarta();
-	//printarcarta(carta2);
-	//carta3 = lercarta();
-	//printarcarta(carta3);
+  // ler as 3 cartas do robo
+  Serial.println("Esperando ler a primeira carta do robo...");
+  carta1 = lercarta();
+  Serial.println("Carta 1 lida!");
+  //printarcarta(carta1);
+  Serial.println("Esperando ler a segunda carta do robo...");
+  carta2 = lercarta();
+  Serial.println("Carta 2 lida!");
+  //printarcarta(carta2);
+  Serial.println("Esperando ler a terceira carta do robo...");
+  carta3 = lercarta();
+  Serial.println("Carta 3 lida!");
+  //printarcarta(carta3);
+}
+
+//joga a maior carta na mao do robo. volta o id da carta
+int jogarmaior(){
+  int id = -1;
+  //Serial.println("Procurando maior carta pra jogar...");
+  if(carta1 != -1 && forca(carta1)>=forca(carta2) && forca(carta1)>=forca(carta3)){
+    id = carta1;
+    jogar(1);
+    return id;
+  }
+  if(carta2 != -1 && forca(carta2)>=forca(carta1) && forca(carta2)>=forca(carta3)){
+    id = carta2;
+    jogar(2);
+    return id;
+  }
+  if(carta3 != -1 && forca(carta3)>=forca(carta1) && forca(carta3)>=forca(carta2)){
+    id = carta3;
+    jogar(3);
+    return id;
+  }
+  //Serial.println("Maior carta não encontrada.");
+}
+
+//joga a maior não-manilha na mao do robo. volta o id da carta. (caso o robo tem 3 manilhas, joga a menor)
+int jogarmaiorescondermanilha(){
+  //Serial.println("Procurando maior não-manilha pra jogar...");
+  int id = -1;
+  if(carta1 != -1 && forca(carta1)>=forca(carta2) && forca(carta1)>=forca(carta3) && forca(carta1) < 11){
+    id = carta1;
+    jogar(1);
+    return id;
+  }
+  if(carta2 != -1 && forca(carta2)>=forca(carta1) && forca(carta2)>=forca(carta3) && forca(carta2) < 11){
+    id = carta2;
+    jogar(2);
+    return id;
+  }
+  if(carta3 != -1 && forca(carta3)>=forca(carta1) && forca(carta3)>=forca(carta2) && forca(carta3 < 11)){
+    id = carta3;
+    jogar(3);
+    return id;
+  }
+  //Serial.println("Menor não-manilha nao encontrada. Jogando menor...");
+  return jogarmenor();
+}
+
+//joga a menor carta na mao do robo. volta o id da carta
+int jogarmenor(){
+  int id = -1;
+  //Serial.println("Procurando menor carta pra jogar...");
+    if(carta1 != -1){
+      if(carta2 == -1 && forca(carta1) <= forca(carta3)){
+        id = carta1;
+        jogar(1);
+        return id;
+      }
+      if(carta3 == -1 && forca(carta1) <= forca(carta2)){
+        id = carta1;
+        jogar(1);
+        return id;
+      }
+      if(carta2 == -1 && carta3 == -1){
+        id = carta1;
+        jogar(1);
+        return id;
+      }
+      if(forca(carta1)<=forca(carta2) && forca(carta1)<=forca(carta3)){
+        id = carta1;
+        jogar(1);
+        return id;
+      }
+    }
+    if(carta2 != -1){
+      if(carta1 == -1 && forca(carta2) <= forca(carta3)){
+        id = carta2;
+        jogar(2);
+        return id;
+      }
+      if(carta3 == -1 && forca(carta2) <= forca(carta1)){
+        id = carta2;
+        jogar(2);
+        return id;
+      }
+      if(carta1 == -1 && carta3 == -1){
+        id = carta2;
+        jogar(2);
+        return id;
+      }
+      if(forca(carta2)<=forca(carta1) && forca(carta2)<=forca(carta3)){
+        id = carta2;
+        jogar(2);
+        return id;
+      }
+    }
+    if(carta3 != -1){
+      if(carta1 == -1 && forca(carta3) <= forca(carta2)){
+        id = carta3;
+        jogar(3);
+        return id;
+      }
+      if(carta2 == -1 && forca(carta3) <= forca(carta1)){
+        id = carta3;
+        jogar(3);
+        return id;
+      }
+      if(carta1 == -1 && carta2 == -1){
+        id = carta3;
+        jogar(3);
+        return id;
+      }
+      if(forca(carta3)<=forca(carta2) && forca(carta3)<=forca(carta1)){
+        id = carta3;
+        jogar(3);
+        return id;
+      }
+    }
+    //Serial.println("Menor carta não encontrada.");
+}
+
+//robo joga uma carta (rng, podendo jogar a maior, a maior nao manilha, ou uma aleatoria), e espera uma jogada do usuario. retorna 2 se ganhou, 1 se empatou, 0 se perdeu
+//o parametro escolha pode ser colocado em 0 para nao usar rng nenhum, sempre jogando a maior
+int comecarrobo(int escolha){
+  Serial.println("Robo escolhendo carta...");
+  delay(1000);
+  int rng = random(0,10);
+  if(escolha == 0) rng = 0;
+  int cartarobo = -1;
+  if(rng<2){
+    cartarobo = jogarmaior();
+  }else if(rng<7){
+    cartarobo = jogarmaiorescondermanilha();
+  }else if(rng<8 && carta1 != -1){
+    cartarobo = jogar(1);
+  }else if(rng<9 && carta2 != -1){
+    cartarobo = jogar(2);
+  }else if(carta3 != -1){
+    cartarobo = jogar(3);
+  }else{
+    jogarmaior();
+  }
+  Serial.println("Esperando carta do jogador...");
+  cartajogador = lercarta();
+  Serial.print("Você jogou: ");
+  Serial.println(nomear(cartajogador));
+  if(forca(cartarobo)>forca(cartajogador)) return 2;
+  if(forca(cartarobo)==forca(cartajogador)) return 1;
+  if(forca(cartarobo)<forca(cartajogador)) return 0;
+}
+
+//robo joga a carta mais fraca que ganha se possivel, se nao empata, se nao joga a mais fraca; retorna 2 se ganhou a rodada, 1 se empatou, 0 se perdeu
+int responderrobo(){
+  Serial.println("Esperando carta do jogador...");
+  cartajogador = lercarta();
+  Serial.print("Você jogou: ");
+  Serial.println(nomear(cartajogador));
+  Serial.println("Robo escolhendo carta...");
+  delay(1000);
+  //ver se da pra ganhar, se nao joga a mais fraca
+  if(forca(carta1) < forca(cartajogador) && forca(carta2) < forca(cartajogador) && forca(carta3) < forca(cartajogador)){
+    jogarmenor();
+    return(0);
+  }
+  
+  int storage_array[3];
+  Vector<int> maiores(storage_array);
+  if (forca(carta1)>forca(cartajogador)) maiores.push_back(carta1);
+  if (forca(carta2)>forca(cartajogador)) maiores.push_back(carta2);
+  if (forca(carta3)>forca(cartajogador)) maiores.push_back(carta3); 
+
+  if(!maiores.empty()){
+    int menor = maiores[0];
+    for(auto c : maiores) if(forca(c)<forca(menor)) menor = c;
+    if(carta1 == menor){
+      jogar(1);
+    }
+    if(carta2 == menor){
+      jogar(2);
+    }
+    if(carta3 == menor){
+      jogar(3);
+    }
+    return(2);
+  }
+  //se nao der, empatar jogando a maior
+  jogarmaior();
+  return(1);
+}
+
+//joga uma rodada
+void novarodada(){
+  inicializarrodada();
+  //variaveis para os resultados de cada mao. quemempatou eh 2 se robo, 1 se jogador
+  int resultadomao1 = -1, resultadomao2 = -1, resultadomao3 = -1, quemempatou1 = -1, quemempatou2 = -1;
+
+  // inicio da mão 1, com o jogador começando
+  if(vez == 1){
+    Serial.println("Rodada começa pelo JOGADOR.");
+    resultadomao1 = responderrobo();
+    if(resultadomao1 == 1) quemempatou1 = 2;
+  }else{
+    Serial.println("Rodada começa pelo ROBO.");
+    delay(1000);
+    resultadomao1 = comecarrobo(1);
+    if(resultadomao1 == 1) quemempatou1 = 1;
+  }
+  if(resultadomao1 == 2){
+    resultadomao2 = comecarrobo(1);
+    if(resultadomao2 == 1) quemempatou2 = 1;
+  }
+  if(resultadomao1 == 1 && quemempatou1 == 2){
+    resultadomao2 = comecarrobo(0);
+    if(resultadomao2 == 1) quemempatou2 = 1;
+  }
+  if(resultadomao1 == 1 && quemempatou1 == 1){
+    resultadomao2 = responderrobo();
+    if(resultadomao2 == 1) quemempatou1 = 2;
+  }
+  if(resultadomao1 == 0){
+    resultadomao2 = responderrobo();
+  }
+  //verificar se a rodada já acabou até aqui
+  if((resultadomao1 == 2 && resultadomao2 == 2)||(resultadomao1 == 1 && resultadomao2 == 2)||(resultadomao1 == 2 && resultadomao2 == 1)){
+    Serial.println("Robo ganha a rodada.");
+    probo += pontosemjogo;
+    return;
+  }
+  if((resultadomao1 == 0 && resultadomao2 == 0)||(resultadomao1 == 1 && resultadomao2 == 0)||(resultadomao1 == 0 && resultadomao2 == 1)){
+    Serial.println("Jogador ganha a rodada.");
+    pjogador += pontosemjogo;
+    return;
+  }
+  //se nao acabou, continuar para a mão 3
+  if(resultadomao2 == 2){
+    resultadomao3 = comecarrobo(1);
+  }
+  if(resultadomao2 == 1 && quemempatou2 == 2){
+    resultadomao3 = comecarrobo(0);
+  }
+  if(resultadomao2 == 1 && quemempatou2 == 1){
+    resultadomao3 = responderrobo();
+  }
+  if(resultadomao2 == 0){
+    resultadomao3 = responderrobo();
+  }
+  //verificar ganhador da rodada
+  if((resultadomao1 == 1 && resultadomao2 == 1 && resultadomao3 == 2)||((resultadomao1 == 2 || resultadomao2 == 2) && resultadomao3 == 2)){
+    Serial.println("Robo ganha a rodada.");
+    probo += pontosemjogo;
+    return;
+  }else if(resultadomao1 == 1 && resultadomao2 == 1 && resultadomao3 == 1){
+    Serial.println("Três empates seguidos. Isso nunca deveria acontecer. Ninguém ganha.");
+    return;
+  }else{
+    Serial.println("Jogador ganha a rodada.");
+    pjogador += pontosemjogo;
+    return;
+  }
+}
+
+//reinicializa pontos e rodada para começar novo jogo
+void novojogo(){
   pjogador = 0;
   probo = 0;
-
-  while(pjogador < 12 || probo < 12){
-    novarodada();
-  }
-
-  Serial.println("FIM DO JOGO. Iniciando novo jogo em 10 segundos...");
-  delay(10000);
+  rodadaatual = 0;
 }
 
+//verifica o ganhador e printa no serial
+void verificarganhador(){
+  if(pjogador>=12){
+    Serial.println("JOGADOR ganhou! Parabéns!");
+  }else if(probo>=12){
+    Serial.println("ROBO ganhou! ;)");
+  }else{
+   Serial.println("Erro: ganhador não encontrado.");
+  }
+  Serial.println("FIM DO JOGO. Iniciando novo jogo em 10 segundos...");
+}
+
+void loop() {
+  
+  novojogo();
+
+  while(pjogador < 12 && probo < 12){
+    novarodada();
+  }
+  
+  verificarganhador();
+
+  delay(10000);
+};
